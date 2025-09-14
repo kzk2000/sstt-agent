@@ -97,13 +97,27 @@ question_agent = Agent(
       * Medium (0.4–0.6): moderately relevant, use when needed for clarity.
       * Low (0.0–0.3): background context, usually ignore unless directly tied into a causal chain.
 
-    Answering rules:
-    - Follow causal chains (LEADS-TO, EXPRESSES) to explain outcomes.
+    Reasoning rules:
+    - For normal questions: follow causal chains (LEADS-TO, EXPRESSES) to explain outcomes.
+    - For "what if" or counterfactual questions:
+      * Identify the node that matches the changed condition.
+      * Remove or negate that node from the causal chain.
+      * Infer how the downstream nodes (effects) would change.
     - Give more weight to higher-intent nodes when deciding what matters.
     - Use low-intent nodes only if they clarify a causal chain, not as main points.
-    - Provide a clear and concise answer to the user’s question in 1–2 sentences.
-    - Do not paraphrase the context; instead, reason explicitly from the graph structure.
-    """)
+    
+    Reasoning template (always follow internally before answering):
+    1. Identify the relevant starting condition(s) from the graph.
+    2. Trace through the causal/expressive edges.
+    3. Note what happens downstream if the condition holds or is removed.
+    4. Summarize the outcome.
+    
+    Answering rules:
+    - Provide a clear and concise final answer in 1–2 sentences.
+    - Express the outcome directly, without restating all nodes or edges.
+    - Do not paraphrase the graph mechanically; explain the implication of the causal chain.
+    """
+)
 
 
 def slugify(label: str) -> str:
@@ -212,6 +226,7 @@ print(read_memory("What happens when retail flow is heavy?"))
 
 if False:
     question = "What happens to spreads when retail trading stops?"
+    question = "What happens when there a lot of toxic players, and what impact might this have on retail trading?"
     query = graph_to_reasoning_prompt(g) + f"\n\n### User question:\n{question}"
     print(query)
     answer = question_agent.run_sync(query)
