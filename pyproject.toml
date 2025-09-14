@@ -1,0 +1,40 @@
+[project]
+name = "sstt-agent"
+version = "0.1.0"
+description = "SSTorytime-inspired LLM agent"
+readme = "README.md"
+requires-python = ">3.12"
+dependencies = [
+    "chromadb>=1.0.20",
+    "numpy>=2.2.6",
+    "pandas>=2.3.2",
+    "plotly>=6.3.0",
+    "pydantic>=2.11.7",
+    "sentence-transformers>=5.1.0",
+    "spacy>=3.8.7",
+    "en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl",
+    # Explicit CUDA 11.8 wheels for GTX 1070 (Pascal, sm_61)
+    "torch @ https://download.pytorch.org/whl/cu118/torch-2.3.1%2Bcu118-cp312-cp312-linux_x86_64.whl",
+    "torchvision @ https://download.pytorch.org/whl/cu118/torchvision-0.18.1%2Bcu118-cp312-cp312-linux_x86_64.whl",
+    "torchaudio @ https://download.pytorch.org/whl/cu118/torchaudio-2.3.1%2Bcu118-cp312-cp312-linux_x86_64.whl",
+    "scikit-learn>=1.7.1",
+    "scipy>=1.15.3",
+    "ruff>=0.12.10",
+    "litellm>=1.75.9",
+    "ipython>=9.4.0",
+    "pydantic-ai>=1.0.6",
+    "duckdb>=1.3.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sstt_agent"]
+
+[tool.hatch.build.targets.editable]
+# Uses wheel config as fallback
