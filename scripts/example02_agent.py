@@ -1,14 +1,11 @@
 import os
-from typing import List
-from typing import Literal
 import re
-from typing import Set
+from typing import List, Literal, Set, Tuple
 
-from pydantic import BaseModel
+from pydantic import BaseModel, confloat
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
-from pydantic import BaseModel, confloat
 
 
 class Node(BaseModel):
@@ -78,7 +75,7 @@ graph_agent = Agent[None, Graph](
         "- Decrease score for:\n"
         "  * Very common or generic words.\n"
         "  * Phrases repeated too frequently in a short span (low coherence).\n\n"
-        "Return only a minimal closed graph that captures the essential causal and semantic structure, "
+        "Return only a minimal closed graph that captures the essential causal and semantic structure,\n"
         "not raw n-grams. Do not include unnecessary nodes.\n\n"
     ),
 )
@@ -105,13 +102,13 @@ question_agent = Agent(
       * Infer how the downstream nodes (effects) would change.
     - Give more weight to higher-intent nodes when deciding what matters.
     - Use low-intent nodes only if they clarify a causal chain, not as main points.
-    
+
     Reasoning template (always follow internally before answering):
     1. Identify the relevant starting condition(s) from the graph.
     2. Trace through the causal/expressive edges.
     3. Note what happens downstream if the condition holds or is removed.
     4. Summarize the outcome.
-    
+
     Answering rules:
     - Provide a clear and concise final answer in 1–2 sentences.
     - Express the outcome directly, without restating all nodes or edges.
@@ -182,27 +179,80 @@ def graph_to_reasoning_prompt(g: Graph) -> str:
     return "\n".join(lines)
 
 
-# --- Functions to manage memory ---
-def write_memory(doc: str, g: Graph):
+class AxiomViolation(Exception):
+    """Raised when a graph violates a hard axiom."""
+
+
+# --- Axioms ---
+
+def axiom_no_cycles_in_leads_to(g: Graph) -> List[Tuple[str, str]]:
+    """A1: LEADS-TO edges must form an acyclic structure."""
+    violations = []
+    visited, stack = set(), set()
+
+    def dfs(node_id: str):
+        if node_id in stack:
+            return True
+        stack.add(node_id)
+        for e in g.edges:
+            if e.source == node_id and e.relation == "LEADS-TO":
+                if dfs(e.target):
+                    violations.append((e.source, e.target))
+        stack.remove(node_id)
+        visited.add(node_id)
+        return False
+
+    for n in g.nodes:
+        if n.id not in visited:
+            dfs(n.id)
+    return violations
+
+
+def axiom_no_near_as_only_link(g: Graph) -> List[Tuple[str, str]]:
+    """A2: NEAR edges cannot be the sole connection between two events."""
+    violations = []
+    for e in g.edges:
+        if e.relation == "NEAR":
+            src_type = next((n.type for n in g.nodes if n.id == e.source), None)
+            tgt_type = next((n.type for n in g.nodes if n.id == e.target), None)
+            if src_type == "event" and tgt_type == "event":
+                # Check if there’s *also* a causal/expressive link
+                has_causal = any(
+                    ee.source == e.source and ee.target == e.target and ee.relation in {"LEADS-TO", "EXPRESSES"}
+                    for ee in g.edges
+                )
+                if not has_causal:
+                    violations.append((e.source, e.target))
+    return violations
+
+
+def axiom_no_self_loops(g: Graph) -> List[Tuple[str, str, str]]:
+    """A3: No node should point to itself."""
+    return [(e.source, e.target, e.relation) for e in g.edges if e.source == e.target]
+
+
+# --- Reinforcement mechanism (Memento-style) ---
+
+def reinforce_edge(g: Graph, path: List[str], increment: float = 0.05):
     """
-    Distill a graph into one or more MemoryEntry objects.
-    - Situation = source node label
-    - Suggestion = relation + target node label(s)
+    Strengthen edges in a path by increasing intentionality of source & target nodes.
+    - increment: how much to boost per traversal (cap at 1.0)
     """
-    for edge in g.edges:
-        src_label = next((n.label for n in g.nodes if n.id == edge.source), edge.source)
-        tgt_label = next((n.label for n in g.nodes if n.id == edge.target), edge.target)
-
-        situation = src_label
-        suggestion = f"{edge.relation} → {tgt_label}"
-
-        entry = MemoryEntry(situation=situation, suggestion=suggestion, graph=g)
-        memory_store.append(entry)
+    for nid in path:
+        node = next((n for n in g.nodes if n.id == nid), None)
+        if node:
+            new_val = min(1.0, node.intentionality + increment)
+            node.intentionality = new_val
 
 
-def read_memory(query: str) -> List[MemoryEntry]:
-    """Retrieve relevant abstract concepts (simplified for demo)."""
-    return [m for m in memory_store if any(w in query for w in m.situation.split())]
+def validate_graph(g: Graph) -> dict:
+    """Run all axioms and return a report."""
+    report = {
+        "no_cycles_in_leads_to": axiom_no_cycles_in_leads_to(g),
+        "no_near_as_only_link": axiom_no_near_as_only_link(g),
+        "no_self_loops": axiom_no_self_loops(g),
+    }
+    return {k: v for k, v in report.items() if v}  # returns violations
 
 
 # --- Example run ---
@@ -214,20 +264,21 @@ Narrow spreads express confidence in liquidity.
 
 result = graph_agent.run_sync(doc)
 g: Graph = result.output
-print(g.model_dump_json(indent=2))
+# print(g.model_dump_json(indent=2))
+print(graph_to_reasoning_prompt(g))
 
-# --- Agent with memory ---
-memory_store: List[MemoryEntry] = []
-# write to memory
-write_memory(doc, g)
-
-# read memory for a new query
-print(read_memory("What happens when retail flow is heavy?"))
+violations = validate_graph(g)
+if violations:
+    print("Axiom violations:", violations)
+else:
+    print("Graph is valid.")
 
 if False:
     question = "What happens to spreads when retail trading stops?"
-    question = "What happens when there a lot of toxic players, and what impact might this have on retail trading?"
+    #    question = "What happens when there are very few toxic takers, and what impact might this have on retail trading?"
+
     query = graph_to_reasoning_prompt(g) + f"\n\n### User question:\n{question}"
     print(query)
     answer = question_agent.run_sync(query)
+    print(50 * "*")
     print(answer.output)
