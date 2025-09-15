@@ -110,7 +110,8 @@ question_agent = Agent(
     4. Summarize the outcome.
 
     Answering rules:
-    - Provide a clear and concise final answer in 1–2 sentences.
+    - **MANDATORY:** Make sure you answer the user's question, keep it simple and straightforward, avoid double negative responses.      
+    - Provide a clear and concise final answer in 1–2 sentences.    
     - Express the outcome directly, without restating all nodes or edges.
     - Do not paraphrase the graph mechanically; explain the implication of the causal chain.
     """
