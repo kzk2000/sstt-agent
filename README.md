@@ -1,6 +1,68 @@
-# SSTorytime Agent
+# γ(3,4) Semantic Spacetime Agent
 
-A Python implementation inspired by Mark Burgess's SSTorytime project for extracting knowledge graphs from subject matter expert (SME) documents and retrieving contextual information for LLM prompting. Incorporates insights from Memento and ArcMemo papers on agent memory systems.
+This project builds a reasoning agent around Mark Burgess’ **Semantic Spacetime (SST)** and Promise Theory, aligned with recent work on memory-centric AI agents (SciBORG, Zep, ArcMemo, Memento).
+
+## Core Ideas
+
+- **Avoid the Ontology Trap**  
+  Ontologies are brittle; biotech shows us to link **knowledge spaces** dynamically instead of forcing a universal taxonomy.  
+  → We adopt *local graphs* with contextual edges rather than a rigid schema.
+
+- **Nodes & Arrows in Knowledge Graphs**  
+  SST distinguishes:
+  - **Nodes**: events, things, concepts (γ(3,4) triad).
+  - **Edges**: NEAR, LEADS-TO, CONTAINS, EXPRESSES.  
+  Intentionality scores ∈ [0,1] weight nodes by information content (entropy).
+
+- **Promise Theory & Physics**  
+  Promises express **local commitments** between agents/nodes. Physics is modeled as networks of promises, showing that causality and state emerge from cooperative commitments rather than imposed laws.
+
+- **Rescuing Property Graphs with SST**  
+  Traditional property graphs lack **causality and context**. SST enriches them with temporal, semantic, and intentional structure—making graphs into *reasoning substrates*, not just storage.
+
+## Alignment with Current Research
+
+- **SciBORG (State and Memory is All You Need)**:contentReference[oaicite:3]{index=3}  
+  Modular LLM agents with **finite-state automata (FSA) memory**. Demonstrates that structured state memory dramatically improves robustness and tool use.  
+  → Our `axiom` layer enforces similar schema-driven state guarantees.
+
+- **Zep & Graphiti (Temporal Knowledge Graphs)**:contentReference[oaicite:4]{index=4}  
+  Knowledge as **episodic → semantic → community** subgraphs with temporal edges.  
+  → Mirrors SST’s layering of events → things → concepts.
+
+- **ArcMemo / Memento**  
+  Memory systems that reinforce edges if used often, and allow selective forgetting.  
+  → Our `reinforce_edge()` boosts intentionality scores with usage, simulating neural consolidation.
+
+## Why This Matters
+
+- Moves beyond **ontology-based knowledge graphs** → toward **dynamic, intentional knowledge spaces**.  
+- Provides **stateful, causal reasoning** while remaining lightweight and adaptable.  
+- Bridges theory (Burgess’ SST + Promise Theory) and practice (SciBORG, Zep, ArcMemo).  
+
+## Implementation
+
+- **Graph extraction** (`graph_agent`) builds γ(3,4) graphs from text.  
+- **Reasoning agent** (`question_agent`) traverses graphs, prioritizing high-intent nodes.  
+- **Axiom layer** (`validate_graph`) ensures valid knowledge graphs:
+  - No causal cycles (`LEADS-TO` must be acyclic).
+  - No NEAR-only links between events.
+  - No self-loops.  
+- **Reinforcement** updates intentionality over time (Memento-style).
+
+See [example02_agent.py](scripts/example02_agent.py) for full implementation.
+
+## Visual Overview
+
+```mermaid
+graph TD
+  A["Event: toxic takers reduce activity (0.9)"] -->|LEADS-TO| B["Event: market makers narrow spreads (0.9)"]
+  B -->|EXPRESSES| C["Concept: confidence in liquidity (0.9)"]
+  A -.NEAR.-> D["Thing: toxic takers (0.8)"]
+  B -.CONTAINS.-> E["Thing: market makers (0.8)"]
+```
+
+
 
 ## Quick Start
 
@@ -8,85 +70,5 @@ A Python implementation inspired by Mark Burgess's SSTorytime project for extrac
 # Install dependencies  
 uv sync
 
-# Run basic demo
-uv run python scripts/demo_clean.py
-
-# Test different domains
-uv run python scripts/demo_software_engineering.py
-uv run python scripts/demo_medical_processes.py
-
-# Validate design principles
-uv run python scripts/validate_design_principles.py
-
-# Test import
-uv run python -c "from sstt_agent import doc_to_n4l; print('OK')"
+uv run scripts/example02_agent.py
 ```
-
-## How it Works
-
-1. **Text → N4L Graph**: Extracts semantic relationships (stories/processes) from SME documents
-2. **Intentionality Scoring**: Ranks concepts by importance using Burgess's fractionation heuristics
-3. **Graph → DuckDB**: Stores nodes (events/things/concepts) and edges (LEADS-TO, EXPRESSES, CONTAINS, NEAR) in `data/` directory
-4. **Query → Context**: Retrieves relevant subgraph as LLM-ready expert context
-
-## Example Usage
-
-```python
-from sstt_agent import doc_to_n4l, N4LDuckDB, N4LRetriever
-
-# Load SME knowledge
-doc = """When retail flow is heavy, toxic takers reduce activity, 
-which causes market makers to narrow spreads. 
-Narrow spreads express confidence in liquidity."""
-
-g = doc_to_n4l(doc)
-
-# Store in database (smart duplicate handling)
-db = N4LDuckDB("knowledge.duckdb")
-db.insert_graph(g, "trading_doc")  # Replaces existing by default
-# db.insert_graph(g, "trading_doc", replace_existing=False)  # Skip if exists
-
-# Retrieve for LLM context
-retr = N4LRetriever("knowledge.duckdb") 
-context, top_nodes, edges = retr.retrieve("Why do spreads narrow?", "trading_doc")
-
-# Use in LLM system prompt
-system_prompt = f"""You are a trading expert. Use this knowledge:
-
-{context}
-
-Answer the user's question based on this expertise."""
-```
-
-## Demo Scripts
-
-- `demo_clean.py` - Basic trading/finance knowledge
-- `demo_software_engineering.py` - Software development practices  
-- `demo_medical_processes.py` - Healthcare domain expertise
-- `demo_research_methodology.py` - Academic research processes
-- `demo_agent_memory.py` - AI agent memory systems
-- `demo_llm_integration.py` - Complete LLM workflow
-- `demo_enhanced_memory.py` - Cross-domain reasoning
-- `demo_document_management.py` - Smart duplicate handling  
-- `validate_design_principles.py` - Comprehensive validation
-
-## Architecture
-
-```
-src/sstt_agent/
-├── pipeline.py          # Main doc_to_n4l function
-├── extract.py           # Pattern-based relation extraction
-├── storage_duckdb.py    # DuckDB persistence layer
-├── retrieve.py          # Query & LLM context formatting
-├── graph.py             # N4LGraph NetworkX wrapper
-├── intent.py            # Intentionality scoring (Burgess)
-└── canonical.py         # Phrase canonicalization
-```
-
-## Theoretical Foundation
-
-Based on Mark Burgess's SSTorytime research on semantic spacetime and knowledge graphs:
-- **Stories as Process**: Knowledge represented as causal narratives rather than static facts
-- **Intentionality**: Foreground concepts identified through frequency and work cost heuristics  
-- **Graph Reasoning**: Semantic relationships enable traversal and story reconstruction
-- **Agent Semantics**: Context-aware knowledge retrieval for intelligent systems
